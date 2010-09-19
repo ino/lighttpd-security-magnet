@@ -3,7 +3,7 @@
 lighttpd-security-magnet
 ========================
 :Author:    clemens fischer
-:Date:      _date: 20100919-1942_
+:Date:      _date: 20100919-1955_
 
 == Summary
 
@@ -39,9 +39,11 @@ There are three result functions:
   redirect.  This is totally passive: if the attacker behaves like a
   reasonable web client, it gets to see the redirect and may choose to
   follow it, thereby starting to attack the host it is using to mount
-  the attack.  For the real administrator or the client machine this
+  the attack.  For the real administrator of the client machine this
   will look like an attack coming from a local host or share and maybe
-  attract his or her attention.
+  attract his or her attention.  Hopefully the redirect will also get
+  recorded by the attack script to mean "Go elsewhere for this
+  resource, leave this host alone".
 - _res_rewrite_: works like a customary rewrite achievable through
   "mod_rewrite" equally well.  This function is less customizable than
   can be done with "mod_rewrite" unless you modify the function, but at
