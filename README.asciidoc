@@ -1,0 +1,83 @@
+// /home/www/gmxhome/README.asciidoc
+
+lighttpd-security-magnet
+========================
+:Author:    clemens fischer
+:Date:      _date: 20100919-1942_
+
+== Summary
+
+There are a number of Howtos on the web regarding the use of
+http://www.lighttpd.net/[lighttpd]'s "mod_magnet" module for advanced
+security, but I found none that had acceptable Lua coding and a simple
+configuration table.  Here is my try.
+
+== Features
+
+The lighttpd-security-magnet has a central configuration table.  Each
+entry is a table of the following format:
+
+- _selector_, table-of-two-strings: lighty[index1][index2], given as a
+  short-hand like l_uri.
+- _pattern_, string: a Lua regex, possibly with captures.
+- _replacement_, string: the string replacing the pattern, used in the
+  "reason" block message and rewriting-URI, possibly with captures.
+- _function_, table: first entry one of the res_* function names from
+  above, mandatory, the rest being additional arguments.  NB: every
+  res_* function gets the replacement string as its first argument, then
+  come the additionals.  This allows rewrites to make use of captures.
+  The second entry should be a boolean indicating whether to drop
+  further queries from the client.
+
+There are three result functions:
+
+- _res_block_: will simply block the remote IP subject to your firewall
+  settings.  The client sees the text "blocked" and this will be it
+  until the firewall rule times out.
+- _res_reflect_: will make a remote browser or script issue the same
+  request run against your host using a HTTP "301 Moved Permanently"
+  redirect.  This is totally passive: if the attacker behaves like a
+  reasonable web client, it gets to see the redirect and may choose to
+  follow it, thereby starting to attack the host it is using to mount
+  the attack.  For the real administrator or the client machine this
+  will look like an attack coming from a local host or share and maybe
+  attract his or her attention.
+- _res_rewrite_: works like a customary rewrite achievable through
+  "mod_rewrite" equally well.  This function is less customizable than
+  can be done with "mod_rewrite" unless you modify the function, but at
+  least you can use captions to use part of the request URI.  You can
+  redirect the offending request anywhere, I use a labyrinth, just for
+  fun, maybe not suitable for a production system.
+
+The module has a few settings beside the configuration table:
+
+- +iam+, string: put the name of this Lua script into this variable or
+  maybe something you can easily see in the error log, it is always part
+  of any log messages coming from the module.
+- +LOG+, number: the log level. zero means "only errors", one means
+  "show blocking actions", two means "show the table entry selected".
+  The log messages appear in the error log.
+- +DROP+, boolean: `true` means "enter remote IP into firewall blocking
+  rules".  Uses linux "xt_recent" module, but if your interface is a
+  simple file, the changes should be straight forward.
+- +firewall_block+, string: the file to enter IP's to be blocked into.
+  May interfere with sophisticated result functions, because a brutal
+  xt_recent ipfilter will also block TCP ACKs etc.
+- +doc_root+, string: where your HTML, PHP and CGI files are located.
+- +ip_exceptions+, table-of-strings: IPs in this table are never
+  blocked, only logged.  Good for testing.
+
+== Installation
+
+Your lighttpd must have Lua configured, then in the lighttpd config you
+need:
+
+===========================================
+`server.modules += ( "mod_magnet" )`
+
+`magnet.attract-raw-url-to = ( "/l/etc/lighttpd/magnet-secu.lua")`
+===========================================
+
+[NOTE]
+Insert the actual location to where you installed this script.
+
