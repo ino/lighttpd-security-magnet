@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100919-1713_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100919-1843_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -36,7 +36,9 @@ local iam = "etc/lighttpd/magnet-secu.lua"
 -- /etc/modprobe.d/modprobe.conf
 -- options xt_recent ip_list_tot=555 ip_pkt_list_tot=33 ip_list_gid=33 ip_list_perms=0664
 local firewall_block = "/proc/net/xt_recent/hole"
+-- fix for your document root
 local doc_root = lighty.env["physical.doc-root"] or "/home/www/doc"
+-- IPs in this table will never get blocked
 local ip_exceptions = {
     "^127%.",
 }
@@ -266,7 +268,9 @@ replacement, string: the string replacing the pattern, used in the
 function, table: first entry one of the res_* function names from above,
   mandatory, the rest being additional arguments.  NB: every res_*
   function gets the replacement string as its first argument, then come
-  the additionals.  This allows rewrites to make use of captures.
+  the additionals.  This allows rewrites to make use of captures.  The
+  second entry should be a boolean indicating whether to drop further
+  queries from the client.
 --]]--
 local trigger_patterns = {
     {l_uri, "(/w00tw00t%-test)", "%1",
