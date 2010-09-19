@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100919-1843_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0113_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -38,6 +38,8 @@ local iam = "etc/lighttpd/magnet-secu.lua"
 local firewall_block = "/proc/net/xt_recent/hole"
 -- fix for your document root
 local doc_root = lighty.env["physical.doc-root"] or "/home/www/doc"
+-- where this modules "mod_status" counters root
+local module_stats = "magnet.secu"
 -- IPs in this table will never get blocked
 local ip_exceptions = {
     "^127%.",
@@ -85,8 +87,24 @@ end
 
 -- zero means: return nil, continue request w/o Lua.
 local ret_code = 0
-local match = string.match
-local gsub = string.gsub
+local s_match = string.match
+local s_gsub = string.gsub
+local s_find = string.find
+
+local function count_up(counter)
+    local cnt = false
+    assert((type(counter)=="string"), "count_up: counter must be string!")
+    if lighty.status then
+        cnt = lighty.status[counter]
+        if cnt then
+            cnt = cnt + 1
+        else
+            cnt = 0
+        end
+        lighty.status[counter] = cnt
+    end
+    return cnt
+end
 
 -- "nil", "number", "string", "boolean", "table", "function", "thread", "userdata"
 
@@ -97,7 +115,7 @@ local function except_ip(ip)
     for idx, ip_p in ipairs(ip_exceptions) do
         t_ip_p = type(ip_p)
         if t_ip_p == "string" then
-            excepted = match(ip, ip_p)
+            excepted = s_match(ip, ip_p)
             if excepted then break end
         else
             logg(0, "ip_exceptions[" .. idx .. "]: must be string: " .. t_ip_p)
@@ -108,10 +126,10 @@ local function except_ip(ip)
     return excepted, mess
 end
 
-local function block_ip(reason)
+local function block_ip(originator, reason)
     local ex = true
     local excepted, mess = except_ip(remote_ip)
-    mess = mess .. ": (" .. reason .. ") -- "
+    mess = mess .. ": " .. originator .. ": (" .. reason .. ") -- "
     mess = mess .. request_method .. " " .. uri_authority .. " " .. request_uri
     if DROP and (remote_ip ~= unknown_ip) and not excepted then
         -- local block_file, err = io.open(firewall_block, "w")
@@ -131,55 +149,76 @@ local function block_ip(reason)
     return ex
 end
 
-local moved_301_pre = [[
+-- keys: "code", "permanence", "request"
+local template_redirect = [[
 <!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML 2.0//EN">
 <html><head>
-<title>301 Moved Permanently</title>
+<title>$code$ Moved $permanence$</title>
 </head><body>
-<h1>Moved Permanently</h1>
-<p>The document has moved <a href="]]
-local moved_301_post = [[
-">here</a>.</p>
+<h1>Moved $permanence$</h1>
+<p>The document has moved <a href="$request$">here</a>.</p>
 </body></html>
 ]]
-res_reflect = function(text, block)
-    local new_request
-    -- why doesn't this work?
-    -- local host, host_port = match(uri_authority, "^(.+)(%:.*)?$")
-    local host, host_port = match(uri_authority, "^(.-)(:.*)$")
-    if not host then
-        host = remote_ip
-    else
-        host = remote_ip .. host_port
+local function make_redirect(template, code, request)
+    local ex
+    local permanence = ((code == "301") and "Permanently") or "Temporarily"
+    assert((type(template)=="string"), "template must be string!")
+    assert((type(request)=="string"), "request must be string!")
+    ex = s_gsub(template, "%$(%w+)%$", {
+        code=code, permanence=permanence, request=request
+    })
+    if s_find(template, ex, 1, true) then
+        logg(0, "make_redirect: no substitions made!")
+        ex = false
     end
-    if block then block_ip(text) end
-    new_request = uri_scheme .. "://" .. host .. request_uri
-    -- lighty.header[""] = ""
-    -- lighty.header["Cache-Control"] = "max-age=0, no-cache, no-store, must-revalidate, post-check=0, pre-check=0"
-    lighty.header["Cache-Control"] = "max-age=0, no-cache, no-store"
-    lighty.header["Connection"] = "close"
-    -- lighty.header["Connection"] = "Keep-Alive"
-    lighty.header["Content-Type"] = "text/html; charset=iso-8859-1"
-    -- lighty.header["Content-Type"] = "text/html; charset=UTF-8"
-    lighty.header["Expires"] = "Thu, 16 Sep 2010 17:33:08 GMT"
-    lighty.header["Keep-Alive"] = "timeout=20, max=968"
-    lighty.header["Location"] = new_request
-    lighty.header["Pragma"] = "no-cache"
-    lighty.header["Server"] = "Apache-kakka"
-    lighty.header["Status"] = "301 Moved Permanently"
-    lighty.header["X-Backend-Server"] = "popl-web02"
-    lighty.header["X-Cache-Info"] = "cached"
-    -- lighty.header["X-Cache-Info"] = "not cacheable; response is 302 without expiry time"
-    lighty.header["X-Powered-By"] = "PHP/5.2.9"
-    lighty.content = { moved_301_pre .. new_request .. moved_301_post }
-    -- return 302
-    return 301
+    return ex
 end
-res_block = function(text, block)
-    if block then block_ip(text) end
+res_reflect = function(text, block, code, headers, mk_body)
+    local content
+    local new_request
+    local permanence
+    local iam = "res_reflect"
+    count_up(module_stats .. "." .. iam)
+    assert((s_match(code, "^30[12]$")), "redirect code must be 301 or 302!")
+    permanence = ((code == "301") and "Permanently") or "Temporarily"
+    -- why doesn't this work?
+    -- local host, host_port = s_match(uri_authority, "^(.+)(%:.*)?$")
+    local host, host_port = s_match(uri_authority, "^(.-)(:.*)$")
+    if host then
+        host = remote_ip .. host_port
+    else
+        host = remote_ip
+    end
+    if block then block_ip(iam, text) end
+    new_request = uri_scheme .. "://" .. host .. request_uri
+    if mk_body then
+        content = make_redirect(template_redirect, code, new_request)
+        if content then
+            lighty.content = { content }
+        else
+            logg(0, iam .. ": make_redirect() text problem")
+        end
+    end
+    lighty.header["Location"] = new_request
+    lighty.header["Status"] = code .. " Moved " .. permanence
+    if type(headers) == "table" then
+        for key, val in pairs(headers) do
+            lighty.header[key] = val
+        end
+    else
+        logg(0, iam .. ": arg 'headers' must be table!")
+    end
+    -- return 302 301
+    return tonumber(code)
+end
+res_block = function(text, block, code)
+    local iam = "res_block"
+    count_up(module_stats .. "." .. iam)
+    if block then block_ip(iam, text) end
     lighty.header["Content-Type"] = "text/plain"
     lighty.content = { "blocked" }
-    return 405
+    -- return 405
+    return code
 end
 --[[--
 {{{
@@ -246,7 +285,9 @@ end
 }}}
 --]]--
 res_rewrite = function(new_request, block)
-    if block then block_ip(new_request) end
+    iam = "res_rewrite"
+    count_up(module_stats .. "." .. iam)
+    if block then block_ip(iam, new_request) end
     -- lighty.header["Content-Type"] = "application/octet-stream"
     -- lighty.env["uri.query"] = uri_query .. (uri_query == "" and "" or "&") .. "q=" .. request_uri
     -- lighty.env["request.orig-uri"]  = request_uri
@@ -258,6 +299,23 @@ res_rewrite = function(new_request, block)
 end
 
 local cgi_infinity = "/cgi/infinity"
+local redir_headers = {
+    -- ["Cache-Control"] = "max-age=0, no-cache, no-store, must-revalidate, post-check=0, pre-check=0",
+    ["Cache-Control"] = "max-age=0, no-cache, no-store",
+    ["Connection"] = "close",
+    -- ["Connection"] = "Keep-Alive",
+    ["Content-Type"] = "text/html; charset=iso-8859-1",
+    -- ["Content-Type"] = "text/html; charset=UTF-8",
+    ["Expires"] = "Thu, 16 Sep 2010 17:33:08 GMT",
+    ["Keep-Alive"] = "timeout=20, max=968",
+    ["Pragma"] = "no-cache",
+    ["Server"] = "Apache-kakka",
+    ["X-Backend-Server"] = "popl-web02",
+    -- ["X-Cache-Info"] = "cached",
+    ["X-Cache-Info"] = "deferred",
+    -- ["X-Cache-Info"] = "not cacheable; response is 302 without expiry time",
+    ["X-Powered-By"] = "PHP/5.2.9",
+}
 
 --[[-- format: each entry of trigger_patterns is a table of four entries:
 selector, table-of-two-strings: lighty[index1][index2],
@@ -274,17 +332,17 @@ function, table: first entry one of the res_* function names from above,
 --]]--
 local trigger_patterns = {
     {l_uri, "(/w00tw00t%-test)", "%1",
-        { res_block, DROP }},
+        { res_block, DROP, 405 }},
     {l_uri, "(/w00tw00t%.)", "%1",
-        { res_reflect, DROP }},
+        { res_reflect, DROP, "301", redir_headers, true }},
     {l_user_agent, "(dragostea mea pentru)", "%1",
-        { res_block, DROP }},
+        { res_block, DROP, 405 }},
     {l_uri, "(/[pP][hH][pP][mM][yY][aA][dD][mM][iI][nN])", "%1",
-        { res_reflect, DROP }},
+        { res_reflect, DROP, "301", redir_headers, true }},
     {l_uri, "([aA][dD][mM][iI][nN].*[sS][cC][rR][Ii][pP][tT][sS])", "%1",
-        { res_reflect, DROP }},
+        { res_reflect, DROP, "301", redir_headers, true }},
     {l_uri, "(/[sS][cC][rR][iI][pP][tT][sS]/[sS][eE][tT][uU][pP]%.[pP][hH][pP])", "%1",
-        { res_reflect, DROP }},
+        { res_reflect, DROP, "301", redir_headers, true }},
     {l_uri, "^(.-/pp/anp%.php.*)$", cgi_infinity,
         {res_rewrite, DROP}},
     {l_uri, "^(.-/manager/anp%.php.*)$", cgi_infinity,
@@ -296,7 +354,7 @@ local trigger_patterns = {
         {res_rewrite, DROP}},
     -- --]]--
     {l_uri, "(UNION)%s", "%1",
-        { res_reflect, DROP }},
+        { res_reflect, DROP, "301", redir_headers, true }},
 }
 
 --[[--
@@ -338,9 +396,9 @@ local function check_patterns()
         if (ex > 0) then
             t_item_fun = type(item_fun)
             if (t_item_fun == "table") then
-                result, n_match = gsub(item_sel, item_pat, item_res)
+                result, n_match = s_gsub(item_sel, item_pat, item_res)
                 if n_match > 0 then
-                    logg(2, "gsub('"..item_sel.."','"..item_pat.."','"..item_res.."')")
+                    logg(2, "s_gsub('"..item_sel.."','"..item_pat.."','"..item_res.."')")
                     t_item_fun = type(item_fun[1])
                     if (t_item_fun == "function") then
                         ex = item_fun[1](result, unpack(item_fun, 2))
@@ -358,6 +416,7 @@ local function check_patterns()
 end
 
 ret_code = check_patterns()
+count_up(module_stats)
 
 -- fallthrough will put it back into the lighty request loop
 -- that means we get the 304 handling for free. ;)
@@ -368,6 +427,7 @@ else
     ret_code = false
 end
 if ret_code then
+    count_up(module_stats .. "." .. tostring(ret_code))
     return ret_code
 else
     return
