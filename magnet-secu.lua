@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0113_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0219_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -173,6 +173,8 @@ local function make_redirect(template, code, request)
     end
     return ex
 end
+-- send the attacker back to where it came from, let him attack his own
+-- site.
 res_reflect = function(text, block, code, headers, mk_body)
     local content
     local new_request
@@ -211,6 +213,7 @@ res_reflect = function(text, block, code, headers, mk_body)
     -- return 302 301
     return tonumber(code)
 end
+-- block the attacker with a configurable http code.
 res_block = function(text, block, code)
     local iam = "res_block"
     count_up(module_stats .. "." .. iam)
@@ -220,70 +223,7 @@ res_block = function(text, block, code)
     -- return 405
     return code
 end
---[[--
-{{{
-17:40:09 2010-09-17 17:40:09: (log.c.175) server started
-17:40:20 2010-09-17 17:40:20: (request.c.304) fd: 5 request-len: 249
-17:40:20 GET /manager/html HTTP/1.1.
-17:40:20 Host: 127.0.0.1.
-17:40:20 User-Agent: Lynx/2.8.5 (Compatible; ELinks).
-17:40:20 Referer: http://127.0.0.1/manager/html.
-17:40:20 Accept: */*.
-17:40:20 Connection: Keep-Alive.
-17:40:20 If-Modified-Since: Mon, 14 Jun 2010 22:16:12 GMT.
-17:40:20 If-None-Match: "2822498463".
-17:40:20 .
-17:40:20
-17:40:20 2010-09-17 17:40:20: (response.c.300) -- splitting Request-URI
-17:40:20 2010-09-17 17:40:20: (response.c.301) Request-URI  :  /manager/html
-17:40:20 2010-09-17 17:40:20: (response.c.302) URI-scheme   :  http
-17:40:20 2010-09-17 17:40:20: (response.c.303) URI-authority:  127.0.0.1
-17:40:20 2010-09-17 17:40:20: (response.c.304) URI-path     :  /manager/html
-17:40:20 2010-09-17 17:40:20: (response.c.305) URI-query    :
-17:40:20 2010-09-17 17:40:20: (response.c.300) -- splitting Request-URI
-17:40:20 2010-09-17 17:40:20: (response.c.301) Request-URI  :  /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.302) URI-scheme   :  http
-17:40:20 2010-09-17 17:40:20: (response.c.303) URI-authority:  127.0.0.1
-17:40:20 2010-09-17 17:40:20: (response.c.304) URI-path     :  /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.305) URI-query    :
-17:40:20 2010-09-17 17:40:20: (response.c.349) -- sanatising URI
-17:40:20 2010-09-17 17:40:20: (response.c.350) URI-path     :  /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (mod_access.c.135) -- mod_access_uri_handler called
-17:40:20 2010-09-17 17:40:20: ...
-17:40:20 2010-09-17 17:40:20: magnet-secu.lua: gsub('/cgi/infinity','(/w00tw00t%.)','%1')
-17:40:20 2010-09-17 17:40:20: magnet-secu.lua: gsub('/cgi/infinity','(UNION)%s','%1')
-17:40:20 2010-09-17 17:40:20: ...
-17:40:20 2010-09-17 17:40:20: (response.c.470) -- before doc_root
-17:40:20 2010-09-17 17:40:20: (response.c.471) Doc-Root     : /home/www/doc
-17:40:20 2010-09-17 17:40:20: (response.c.472) Rel-Path     : /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.473) Path         :
-17:40:20 2010-09-17 17:40:20: (response.c.521) -- after doc_root
-17:40:20 2010-09-17 17:40:20: (response.c.522) Doc-Root     : /home/www/doc
-17:40:20 2010-09-17 17:40:20: (response.c.523) Rel-Path     : /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.524) Path         : /home/www/doc/cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.541) -- logical -> physical
-17:40:20 2010-09-17 17:40:20: (response.c.542) Doc-Root     : /home/www/doc
-17:40:20 2010-09-17 17:40:20: (response.c.543) Rel-Path     : /cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.544) Path         : /home/www/doc/cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.561) -- handling physical path
-17:40:20 2010-09-17 17:40:20: (response.c.562) Path         : /home/www/doc/cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.569) -- file found
-17:40:20 2010-09-17 17:40:20: (response.c.570) Path         : /home/www/doc/cgi/infinity
-17:40:20 2010-09-17 17:40:20: (response.c.719) -- handling subrequest
-17:40:20 2010-09-17 17:40:20: (response.c.720) Path         : /home/www/doc/cgi/infinity
-17:40:20 2010-09-17 17:40:20: (mod_access.c.135) -- mod_access_uri_handler called
-17:40:20 2010-09-17 17:40:20: (response.c.128) Response-Header:
-17:40:20 HTTP/1.1 200 OK.
-17:40:20 Last-Modified: Sun, 28 Dec 2003 20:15:00 GMT.
-17:40:20 Content-Type: text/html.
-17:40:20 Transfer-Encoding: chunked.
-17:40:20 Date: Fri, 17 Sep 2010 15:40:20 GMT.
-17:40:20 Server: Santos Al Helper.
-17:40:20 .
-17:40:20
-17:40:20 127.0.0.1 127.0.0.1 - [17/Sep/2010:17:40:20 +0200] "GET /manager/html HTTP/1.1" 200 2780 "http://127.0.0.1/manager/html" "Lynx/2.8.5 (Compatible; ELinks)"
-}}}
---]]--
+-- send the attacker elsewhere eg. using a CGI.
 res_rewrite = function(new_request, block)
     iam = "res_rewrite"
     count_up(module_stats .. "." .. iam)
