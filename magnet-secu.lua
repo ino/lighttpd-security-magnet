@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0219_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0224_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -225,7 +225,7 @@ res_block = function(text, block, code)
 end
 -- send the attacker elsewhere eg. using a CGI.
 res_rewrite = function(new_request, block)
-    iam = "res_rewrite"
+    local iam = "res_rewrite"
     count_up(module_stats .. "." .. iam)
     if block then block_ip(iam, new_request) end
     -- lighty.header["Content-Type"] = "application/octet-stream"
