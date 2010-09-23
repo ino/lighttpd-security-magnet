@@ -3,16 +3,29 @@
 lighttpd-security-magnet
 ========================
 :Author:    clemens fischer
-:Date:      _date: 20100919-1955_
+:Date:      _date: 20100923-1409_
 
 == Summary
 
 There are a number of Howtos on the web regarding the use of
 http://www.lighttpd.net/[lighttpd]'s "mod_magnet" module for advanced
 security, but I found none that had acceptable Lua coding and a simple
-configuration table.  Here is my try.
+configuration table.  Here is my try: a simple module named
+_magnet-secu.lua_.
 
-== Features
+This module is quite effective: an attacker is served quickly and, if
+the URI is configured to be blocked, his IP is entered into a firewall
+table blocking him immediately.
+
+Statistics are kept if "mod_status" is used:
+
+  http://127.0.0.1/http-stats
+  magnet.secu: 5
+  magnet.secu.remote_ip.127.0.0.1: 3
+  magnet.secu.res_block: 3
+  magnet.secu.ret_code.405: 1
+
+== Configuration
 
 The lighttpd-security-magnet has a central configuration table.  Each
 entry is a table of the following format:
@@ -57,8 +70,8 @@ The module has a few settings beside the configuration table:
   maybe something you can easily see in the error log, it is always part
   of any log messages coming from the module.
 - +LOG+, number: the log level. zero means "only errors", one means
-  "show blocking actions", two means "show the table entry selected".
-  The log messages appear in the error log.
+  "also show blocking actions", two means "also show the table entry
+  selected".  The log messages appear in the error log.
 - +DROP+, boolean: `true` means "enter remote IP into firewall blocking
   rules".  Uses linux "xt_recent" module, but if your interface is a
   simple file, the changes should be straight forward.
@@ -68,6 +81,7 @@ The module has a few settings beside the configuration table:
 - +doc_root+, string: where your HTML, PHP and CGI files are located.
 - +ip_exceptions+, table-of-strings: IPs in this table are never
   blocked, only logged.  Good for testing.
+- +module_stats+, string: the prefix of the modules statistics entries.
 
 == Installation
 

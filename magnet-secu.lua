@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100920-0224_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100923-1352_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -38,7 +38,7 @@ local iam = "etc/lighttpd/magnet-secu.lua"
 local firewall_block = "/proc/net/xt_recent/hole"
 -- fix for your document root
 local doc_root = lighty.env["physical.doc-root"] or "/home/www/doc"
--- where this modules "mod_status" counters root
+-- where this modules "mod_status" counters root (count_up())
 local module_stats = "magnet.secu"
 -- IPs in this table will never get blocked
 local ip_exceptions = {
@@ -367,7 +367,8 @@ else
     ret_code = false
 end
 if ret_code then
-    count_up(module_stats .. "." .. tostring(ret_code))
+    count_up(module_stats .. ".ret_code." .. tostring(ret_code))
+    count_up(module_stats .. ".remote_ip." .. remote_ip)
     return ret_code
 else
     return
