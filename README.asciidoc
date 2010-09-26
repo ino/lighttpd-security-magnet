@@ -3,7 +3,7 @@
 lighttpd-security-magnet
 ========================
 :Author:    clemens fischer
-:Date:      _date: 20100923-1409_
+:Date:      _date: 20100926-2236_
 
 == Summary
 
@@ -97,3 +97,14 @@ need:
 [NOTE]
 Insert the actual location to where you installed this script.
 
+== Limitations
+
+There's a problem with eg. those w00tw00t bots: they declare a HTTP/1.1
+request, but provide no "_Host_:" header, thus lighttpd reacts with HTTP
+400 +"Bad Request"+.  This conforms to the RFCs, but disallows us to get
+to handle this type of requests.  You might set +"server.protocol-http11
+= disable"+ in the config, but (cited from a forum post):  "Once you
+disable HTTP 1.1, Lighty handles each connection in HTTP 1.0 style. That
+means no persistent connections, no chunked transfer encoding etc. That
+will make the regular browser based web sessions (IE and Firefox)
+slower."
