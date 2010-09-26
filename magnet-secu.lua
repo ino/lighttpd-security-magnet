@@ -1,4 +1,4 @@
--- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100923-1352_
+-- /usr/local/etc/lighttpd/magnet-secu.lua _date: 20100926-2227_
 -- vim: set filetype=lua ts=4:
 -- -*- mode: lua; -*-
 --
@@ -50,15 +50,16 @@ LOG = 1
 DROP = true
 
 -- selectors that can be used in the trigger_patterns[] rule table
-local l_remote_ip = { "env", "request.remote-ip" }
 local l_host = { "request", "Host" }
 local l_method = { "env", "request.method" }
 local l_orig_uri = { "env", "request.orig-uri" }
-local l_uri = { "env", "request.uri" }
-local l_user_agent = { "request", "User-Agent" }
+local l_protocol = { "env", "request.protocol" }
+local l_remote_ip = { "env", "request.remote-ip" }
 local l_uri_authority = { "env", "uri.authority" }
+local l_uri = { "env", "request.uri" }
 local l_uri_query = { "env", "uri.query" }
 local l_uri_scheme = { "env", "uri.scheme" }
+local l_user_agent = { "request", "User-Agent" }
 
 -- grab request values from lighty environment
 local unknown_authority = "UNKOWN_AUTHORITY"
@@ -66,11 +67,13 @@ local unknown_host = "UNKNOWN_HOST"
 local unknown_ip = "UNKNOWN_IP"
 local unknown_method = "UNKNOWN_METHOD"
 local unknown_orig_uri = "UNKNOWN_ORIG_URI"
+local unknown_protocol = "UNKNOWN_PROTOCOL"
 local unknown_uri = "UNKNOWN_URI"
 local unknown_user_agent = "UNKNOWN_USER_AGENT"
 local remote_ip = lighty[l_remote_ip[1]][l_remote_ip[2]] or unknown_ip
 local request_host = lighty[l_host[1]][l_host[2]] or unknown_host
 local request_method = lighty[l_method[1]][l_method[2]] or unknown_method
+local request_protocol = lighty[l_protocol[1]][l_protocol[2]] or unknown_protocol
 local request_uri = lighty[l_uri[1]][l_uri[2]] or
     lighty[l_orig_uri[1]][l_orig_uri[2]] or unknown_uri
 local request_user_agent = lighty[l_user_agent[1]][l_user_agent[2]] or unknown_user_agent
@@ -271,6 +274,17 @@ function, table: first entry one of the res_* function names from above,
   queries from the client.
 --]]--
 local trigger_patterns = {
+    --[[--
+    There's this problem with all those w00tw00t bots: they declare
+    a HTTP/1.1 request, but provide no "Host:" header, thus lighttpd
+    reacts with HTTP 400 "Bad Request".  This conforms to the RFCs, but
+    disallows us to get to handle this type of requests.  You might
+    set "server.protocol-http11 = disable" in the config, but:  "Once
+    you disable HTTP 1.1, Lighty handles each connection in HTTP 1.0
+    style. That means no persistent connections, no chunked transfer
+    encoding etc. That will make the regular browser based web sessions
+    (IE and Firefox) slower."
+    --]]--
     {l_uri, "(/w00tw00t%-test)", "%1",
         { res_block, DROP, 405 }},
     {l_uri, "(/w00tw00t%.)", "%1",
